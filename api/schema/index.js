@@ -5,6 +5,7 @@ const schema = gql`
   scalar JSONObject
 
   type Query {
+    globalNumber: Int
     currentUser: User
     events: [Event!]
     event(slug: String): Event
@@ -14,6 +15,7 @@ const schema = gql`
   }
 
   type Mutation {
+    increment:Int
     createEvent(
       slug: String!
       title: String!

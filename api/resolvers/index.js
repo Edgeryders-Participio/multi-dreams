@@ -11,11 +11,14 @@ const { Kind } = require('graphql/language');
 const mongoose = require('mongoose');
 const dayjs = require('dayjs');
 
+let globalnumber = 1;
+
 const resolvers = {
   Query: {
     // currentMember: (parent, args, { currentMember }) => {
     //   return currentMember;
     // },
+    globalNumber: () => globalnumber,
     currentUser: (parent, args, { currentUser }) => {
       return currentUser;
     },
@@ -84,6 +87,14 @@ const resolvers = {
     },
   },
   Mutation: {
+    increment: async (
+      parent, args, context
+    ) => {
+      current = globalnumber;
+      await new Promise(function(res) { setTimeout(function() {res()}, 5000)});
+      globalnumber = current+1;
+      return;
+    },
     createEvent: async (
       parent,
       { slug, title, description, summary, currency, registrationPolicy },
