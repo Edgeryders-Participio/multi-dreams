@@ -58,6 +58,10 @@ const server = new ApolloServer({
         // );
         console.error('Authentication token is invalid');
       }
+    } else if (process.env.NODE_ENV == "development") {
+      // For tests so they can edit with no auth
+      currentUser = await models.User.findOne({ isOrgAdmin: true });
+      console.log(currentUser ? "EVERYONE HAS ADMIN ACCESS" : "No admin user available for testing");
     }
 
     return {
