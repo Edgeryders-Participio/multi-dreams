@@ -62,6 +62,16 @@ const resolvers = {
         ...(textSearchTerm && { $text: { $search: textSearchTerm } }),
       });
     },
+    grant: async(
+        parent,
+        { grantId },
+        { models: { Grant } }
+    ) => {
+      let grant = await Grant.findOne({_id: grantId});
+      if(!grant)
+        throw new Error("That grant does not exist.");
+      return grant;
+    },
     members: async (
       parent,
       { eventId, isApproved },
@@ -686,187 +696,31 @@ const resolvers = {
     approveForGranting: async (
       parent,
       { dreamId, approved },
-      { currentUser, models: { Dream, Member } }
+      { currentUser, models: { Dream }, controller }
     ) => {
-      const dream = await Dream.findOne({ _id: dreamId });
-
-      const currentMember = await Member.findOne({
-        userId: currentUser.id,
-        eventId: dream.eventId,
-      });
-
-      if (!currentMember || (!currentMember.isAdmin && !currentMember.isGuide))
-        throw new Error(
-          'You need to be admin or guide to approve for granting'
-        );
-
-      dream.approved = approved;
-      return dream.save();
+      console.log(dreamId);
+      return controller.setDreamApproval(dreamId, approved, currentUser);
     },
     giveGrant: async (
       parent,
       { eventId, dreamId, value },
-      { currentUser, models: { Member, Grant, Event, Dream } }
+      { currentUser, controller }
     ) => {
-      const currentMember = await Member.findOne({
-        userId: currentUser.id,
-        eventId,
-      });
-
-      if (!currentMember || !currentMember.isApproved)
-        throw new Error(
-          'You need to be a logged in approved member to grant things'
-        );
-
-      if (value <= 0) throw new Error('Value needs to be more than zero');
-
-      const event = await Event.findOne({ _id: eventId });
-
-      // Check that granting is open
-      if (!event.grantingIsOpen) throw new Error('Granting is not open');
-
-      const dream = await Dream.findOne({ _id: dreamId, eventId });
-
-      if (!dream.approved)
-        throw new Error('Dream is not approved for granting');
-
-      // Check that the max goal of the dream is not exceeded
-      const [
-        { grantsForDream } = { grantsForDream: 0 },
-      ] = await Grant.aggregate([
-        { $match: { dreamId: mongoose.Types.ObjectId(dreamId) } },
-        { $group: { _id: null, grantsForDream: { $sum: '$value' } } },
-      ]);
-
-      // TODO: Create virtual on dream model instead?
-      const maxGoalGrants = Math.ceil(
-        Math.max(dream.maxGoal, dream.minGoal) / event.grantValue
-      );
-
-      if (grantsForDream + value > maxGoalGrants)
-        throw new Error("You can't overfund this dream.");
-
-      // Check that it is not more than is allowed per dream (if this number is set)
-      if (event.maxGrantsToDream && value > event.maxGrantsToDream) {
-        throw new Error(
-          `You can give a maximum of ${event.maxGrantsToDream} grants to one dream`
-        );
-      }
-
-      // Check that user has not spent more grants than he has
-      const [
-        { grantsFromUser } = { grantsFromUser: 0 },
-      ] = await Grant.aggregate([
-        {
-          $match: {
-            memberId: mongoose.Types.ObjectId(currentMember.id),
-            type: 'USER',
-          },
-        },
-        { $group: { _id: null, grantsFromUser: { $sum: '$value' } } },
-      ]);
-
-      if (grantsFromUser + value > event.grantsPerMember)
-        throw new Error('You are trying to spend too many grants.');
-
-      // Check that total budget of event will not be exceeded
-      const [
-        { grantsFromEverybody } = { grantsFromEverybody: 0 },
-      ] = await Grant.aggregate([
-        {
-          $match: {
-            eventId: mongoose.Types.ObjectId(currentMember.eventId),
-            reclaimed: false,
-          },
-        },
-        { $group: { _id: null, grantsFromEverybody: { $sum: '$value' } } },
-      ]);
-
-      const totalGrantsToSpend = Math.floor(
-        event.totalBudget / event.grantValue
-      );
-
-      if (grantsFromEverybody + value > totalGrantsToSpend)
-        throw new Error('Total budget of event is exeeced with this grant');
-
-      return new Grant({
-        eventId: currentMember.eventId,
-        dreamId,
-        value,
-        memberId: currentMember.id,
-      }).save();
+      return await controller.giveGrant(eventId, dreamId, currentUser, value);
     },
     deleteGrant: async (
       parent,
       { eventId, grantId },
-      { currentUser, models: { Grant, Event, Member } }
+      { currentUser, controller }
     ) => {
-      const currentMember = await Member.findOne({
-        userId: currentUser.id,
-        eventId,
-      });
-
-      if (!currentMember || !currentMember.isApproved)
-        throw new Error(
-          'You need to be a logged in approved member to remove a grant'
-        );
-
-      const event = await Event.findOne({ _id: eventId });
-
-      // Check that granting is open
-      if (!event.grantingIsOpen)
-        throw new Error("Can't remove grant when granting is closed");
-
-      const grant = await Grant.findOneAndDelete({
-        _id: grantId,
-        memberId: currentMember.id,
-      });
-      return grant;
+      return await controller.deleteGrant(grantId, currentUser);
     },
     reclaimGrants: async (
       parent,
       { dreamId },
-      { currentUser, models: { Grant, Event, Dream, Member } }
+      { currentUser, controller }
     ) => {
-      const dream = await Dream.findOne({ _id: dreamId });
-
-      const currentMember = await Member.findOne({
-        userId: currentUser.id,
-        eventId: dream.eventId,
-      });
-
-      if (!currentMember || !currentMember.isAdmin)
-        throw new Error('You need to be admin to reclaim grants');
-
-      const event = await Event.findOne({ _id: dream.eventId });
-
-      // Granting needs to be closed before you can reclaim grants
-      if (!event.grantingHasClosed)
-        throw new Error("You can't reclaim grants before granting has closed");
-
-      // If dream has reached minimum funding, you can't reclaim its grants
-      const [
-        { grantsForDream } = { grantsForDream: 0 },
-      ] = await Grant.aggregate([
-        {
-          $match: {
-            dreamId: mongoose.Types.ObjectId(dreamId),
-            reclaimed: false,
-          },
-        },
-        { $group: { _id: null, grantsForDream: { $sum: '$value' } } },
-      ]);
-
-      const minGoalGrants = Math.ceil(dream.minGoal / event.grantValue);
-
-      if (grantsForDream >= minGoalGrants)
-        throw new Error(
-          "You can't reclaim grants if it has reached minimum funding"
-        );
-
-      await Grant.updateMany({ dreamId }, { reclaimed: true });
-
-      return dream;
+        return controller.reclaimGrantsForDream(dreamId, currentUser);
     },
     preOrPostFund: async (
       parent,
@@ -1227,34 +1081,12 @@ const resolvers = {
     event: async (dream, args, { models: { Event } }) => {
       return Event.findOne({ _id: dream.eventId });
     },
-    minGoalGrants: async (dream, args, { models: { Event } }) => {
-      const { grantValue } = await Event.findOne({ _id: dream.eventId });
-      if (dream.minGoal === null || !grantValue) {
-        return null;
-      }
-      return Math.ceil(dream.minGoal / grantValue);
-    },
-    maxGoalGrants: async (dream, args, { models: { Event } }) => {
-      const { grantValue } = await Event.findOne({ _id: dream.eventId });
-      if (dream.maxGoal === null || !grantValue) {
-        return null;
-      }
-      return Math.ceil(dream.maxGoal / grantValue);
-    },
-    currentNumberOfGrants: async (dream, args, { models: { Grant } }) => {
-      const [
-        { grantsForDream } = { grantsForDream: 0 },
-      ] = await Grant.aggregate([
-        {
-          $match: {
-            dreamId: mongoose.Types.ObjectId(dream.id),
-            reclaimed: false,
-          },
-        },
-        { $group: { _id: null, grantsForDream: { $sum: '$value' } } },
-      ]);
-      return grantsForDream;
-    },
+    minGoalGrants: async (dream, args, {controller}) => {
+      return await controller.minGoalGrants(dream); },
+    maxGoalGrants: async (dream, args, {controller}) => {
+      return await controller.maxGoalGrants(dream); },
+    currentNumberOfGrants: async (dream, args, {controller} ) => {
+      return await controller.currentNumberOfGrants(dream); },
     numberOfComments: (dream) => {
       return dream.comments.length;
     },
@@ -1285,6 +1117,9 @@ const resolvers = {
     parseLiteral(ast) {
       if (ast.kind === Kind.INT) {
         return parseInt(ast.value, 10); // ast value is always in string format
+      }
+      if (ast.kind === Kind.STRING) {
+        return new Date(ast.value);
       }
       return null;
     },
