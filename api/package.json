@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "node test.js"
   },
   "author": "",
   "license": "ISC",
@@ -31,6 +32,7 @@
     "node-fetch": "^2.6.0"
   },
   "devDependencies": {
+    "node-fetch": "^2.6.0",
     "nodemon": "^2.0.4"
   }
 }

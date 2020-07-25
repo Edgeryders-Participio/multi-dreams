@@ -25,6 +25,7 @@ const schema = require('./schema');
 const resolvers = require('./resolvers');
 const { getModels } = require('./database');
 const { getConnection } = require('./database/connection');
+const getController = require('./controller');
 
 const server = new ApolloServer({
   typeDefs: schema,
@@ -32,6 +33,7 @@ const server = new ApolloServer({
   context: async ({ req }) => {
     const db = await getConnection();
     const models = getModels(db);
+    const controller = getController(models);
 
     let organization = null;
     const subdomain = req.headers['dreams-subdomain'];
@@ -58,12 +60,17 @@ const server = new ApolloServer({
         // );
         console.error('Authentication token is invalid');
       }
+    } else if (process.env.NODE_ENV == "development") {
+      // For tests so they can edit with no auth
+      currentUser = await models.User.findOne({ isOrgAdmin: true });
+      console.log(currentUser ? "EVERYONE HAS ADMIN ACCESS" : "No admin user available for testing");
     }
 
     return {
       models,
       currentUser,
       organization,
+      controller,
     };
   },
   playground: true,

@@ -3,6 +3,7 @@ const { gql } = require('apollo-server-micro');
 const schema = gql`
   scalar JSON
   scalar JSONObject
+  scalar Cursor
 
   type Query {
     currentUser: User
@@ -11,6 +12,18 @@ const schema = gql`
     dream(id: ID!): Dream
     dreams(eventId: ID!, textSearchTerm: String): [Dream]
     members(eventId: ID!, isApproved: Boolean): [Member]
+    grant(grantId: ID!): Grant
+    logEntries(limit: Int, after: Cursor, since: Date): LogEntryConnection
+  }
+  
+  type LogEntryConnection {
+    totalNumber: Int
+    edges: [LogEntryEdge]
+  }
+  
+  type LogEntryEdge {
+    cursor: Cursor
+    node: LogEntry
   }
 
   type Mutation {
@@ -295,6 +308,19 @@ const schema = gql`
     updatedAt: Date
     content: String!
   }
+  
+  type LogEntry {
+    when: Date!
+    details: LogEntryDetails
+  }
+  
+  type GrantGivenDetails {
+    from: User
+    to: Dream
+    numberOfGrants: Int!
+  }
+  
+  union LogEntryDetails = GrantGivenDetails
 
   type CustomFieldValue {
     customField: CustomField

@@ -62,6 +62,16 @@ const resolvers = {
         ...(textSearchTerm && { $text: { $search: textSearchTerm } }),
       });
     },
+    grant: async(
+        parent,
+        { grantId },
+        { models: { Grant } }
+    ) => {
+      let grant = await Grant.findOne({_id: grantId});
+      if(!grant)
+        throw new Error("That grant does not exist.");
+      return grant;
+    },
     members: async (
       parent,
       { eventId, isApproved },
@@ -82,6 +92,45 @@ const resolvers = {
         ...(typeof isApproved === 'boolean' && { isApproved }),
       });
     },
+    logEntries: async (
+        parent,
+        {limit, after, since},
+    ) => {
+      // Must give necessary info for child nodes, but don't want to make a query yet.
+      // E.g. dunno if it will be a count or a retrieve query.
+      return {
+        pagination: {limit, after},
+        filter: since
+            ? {when: { $gt: since}}
+            : {}
+      };
+    },
+  },
+  LogEntryConnection: {
+    totalNumber: async (
+        { filter },
+        args,
+        { models: { LogEntries: { LogEntry }}}) => {
+      return LogEntry.countDocuments(filter);
+    },
+    edges: async (
+        { filter, pagination },
+        args,
+        { models: { LogEntries: { LogEntry }}}
+    ) => {
+      let query = LogEntry.find(filter).sort("-when");
+
+      let {limit, after} = pagination
+      if(after) query = query.skip(after);
+      if(limit) query = query.limit(limit);
+
+      return (await query.exec())
+          .map((logEntry, index) => ({
+            node: logEntry,
+            cursor: (after || 0)+index+1
+          })
+      );
+    }
   },
   Mutation: {
     createEvent: async (
@@ -686,187 +735,31 @@ const resolvers = {
     approveForGranting: async (
       parent,
       { dreamId, approved },
-      { currentUser, models: { Dream, Member } }
+      { currentUser, models: { Dream }, controller }
     ) => {
-      const dream = await Dream.findOne({ _id: dreamId });
-
-      const currentMember = await Member.findOne({
-        userId: currentUser.id,
-        eventId: dream.eventId,
-      });
-
-      if (!currentMember || (!currentMember.isAdmin && !currentMember.isGuide))
-        throw new Error(
-          'You need to be admin or guide to approve for granting'
-        );
-
-      dream.approved = approved;
-      return dream.save();
+      console.log(dreamId);
+      return controller.setDreamApproval(dreamId, approved, currentUser);
     },
     giveGrant: async (
       parent,
       { eventId, dreamId, value },
-      { currentUser, models: { Member, Grant, Event, Dream } }
+      { currentUser, controller }
     ) => {
-      const currentMember = await Member.findOne({
-        userId: currentUser.id,
-        eventId,
-      });
-
-      if (!currentMember || !currentMember.isApproved)
-        throw new Error(
-          'You need to be a logged in approved member to grant things'
-        );
-
-      if (value <= 0) throw new Error('Value needs to be more than zero');
-
-      const event = await Event.findOne({ _id: eventId });
-
-      // Check that granting is open
-      if (!event.grantingIsOpen) throw new Error('Granting is not open');
-
-      const dream = await Dream.findOne({ _id: dreamId, eventId });
-
-      if (!dream.approved)
-        throw new Error('Dream is not approved for granting');
-
-      // Check that the max goal of the dream is not exceeded
-      const [
-        { grantsForDream } = { grantsForDream: 0 },
-      ] = await Grant.aggregate([
-        { $match: { dreamId: mongoose.Types.ObjectId(dreamId) } },
-        { $group: { _id: null, grantsForDream: { $sum: '$value' } } },
-      ]);
-
-      // TODO: Create virtual on dream model instead?
-      const maxGoalGrants = Math.ceil(
-        Math.max(dream.maxGoal, dream.minGoal) / event.grantValue
-      );
-
-      if (grantsForDream + value > maxGoalGrants)
-        throw new Error("You can't overfund this dream.");
-
-      // Check that it is not more than is allowed per dream (if this number is set)
-      if (event.maxGrantsToDream && value > event.maxGrantsToDream) {
-        throw new Error(
-          `You can give a maximum of ${event.maxGrantsToDream} grants to one dream`
-        );
-      }
-
-      // Check that user has not spent more grants than he has
-      const [
-        { grantsFromUser } = { grantsFromUser: 0 },
-      ] = await Grant.aggregate([
-        {
-          $match: {
-            memberId: mongoose.Types.ObjectId(currentMember.id),
-            type: 'USER',
-          },
-        },
-        { $group: { _id: null, grantsFromUser: { $sum: '$value' } } },
-      ]);
-
-      if (grantsFromUser + value > event.grantsPerMember)
-        throw new Error('You are trying to spend too many grants.');
-
-      // Check that total budget of event will not be exceeded
-      const [
-        { grantsFromEverybody } = { grantsFromEverybody: 0 },
-      ] = await Grant.aggregate([
-        {
-          $match: {
-            eventId: mongoose.Types.ObjectId(currentMember.eventId),
-            reclaimed: false,
-          },
-        },
-        { $group: { _id: null, grantsFromEverybody: { $sum: '$value' } } },
-      ]);
-
-      const totalGrantsToSpend = Math.floor(
-        event.totalBudget / event.grantValue
-      );
-
-      if (grantsFromEverybody + value > totalGrantsToSpend)
-        throw new Error('Total budget of event is exeeced with this grant');
-
-      return new Grant({
-        eventId: currentMember.eventId,
-        dreamId,
-        value,
-        memberId: currentMember.id,
-      }).save();
+      return await controller.giveGrant(eventId, dreamId, currentUser, value);
     },
     deleteGrant: async (
       parent,
       { eventId, grantId },
-      { currentUser, models: { Grant, Event, Member } }
+      { currentUser, controller }
     ) => {
-      const currentMember = await Member.findOne({
-        userId: currentUser.id,
-        eventId,
-      });
-
-      if (!currentMember || !currentMember.isApproved)
-        throw new Error(
-          'You need to be a logged in approved member to remove a grant'
-        );
-
-      const event = await Event.findOne({ _id: eventId });
-
-      // Check that granting is open
-      if (!event.grantingIsOpen)
-        throw new Error("Can't remove grant when granting is closed");
-
-      const grant = await Grant.findOneAndDelete({
-        _id: grantId,
-        memberId: currentMember.id,
-      });
-      return grant;
+      return await controller.deleteGrant(grantId, currentUser);
     },
     reclaimGrants: async (
       parent,
       { dreamId },
-      { currentUser, models: { Grant, Event, Dream, Member } }
+      { currentUser, controller }
     ) => {
-      const dream = await Dream.findOne({ _id: dreamId });
-
-      const currentMember = await Member.findOne({
-        userId: currentUser.id,
-        eventId: dream.eventId,
-      });
-
-      if (!currentMember || !currentMember.isAdmin)
-        throw new Error('You need to be admin to reclaim grants');
-
-      const event = await Event.findOne({ _id: dream.eventId });
-
-      // Granting needs to be closed before you can reclaim grants
-      if (!event.grantingHasClosed)
-        throw new Error("You can't reclaim grants before granting has closed");
-
-      // If dream has reached minimum funding, you can't reclaim its grants
-      const [
-        { grantsForDream } = { grantsForDream: 0 },
-      ] = await Grant.aggregate([
-        {
-          $match: {
-            dreamId: mongoose.Types.ObjectId(dreamId),
-            reclaimed: false,
-          },
-        },
-        { $group: { _id: null, grantsForDream: { $sum: '$value' } } },
-      ]);
-
-      const minGoalGrants = Math.ceil(dream.minGoal / event.grantValue);
-
-      if (grantsForDream >= minGoalGrants)
-        throw new Error(
-          "You can't reclaim grants if it has reached minimum funding"
-        );
-
-      await Grant.updateMany({ dreamId }, { reclaimed: true });
-
-      return dream;
+        return controller.reclaimGrantsForDream(dreamId, currentUser);
     },
     preOrPostFund: async (
       parent,
@@ -1227,34 +1120,12 @@ const resolvers = {
     event: async (dream, args, { models: { Event } }) => {
       return Event.findOne({ _id: dream.eventId });
     },
-    minGoalGrants: async (dream, args, { models: { Event } }) => {
-      const { grantValue } = await Event.findOne({ _id: dream.eventId });
-      if (dream.minGoal === null || !grantValue) {
-        return null;
-      }
-      return Math.ceil(dream.minGoal / grantValue);
-    },
-    maxGoalGrants: async (dream, args, { models: { Event } }) => {
-      const { grantValue } = await Event.findOne({ _id: dream.eventId });
-      if (dream.maxGoal === null || !grantValue) {
-        return null;
-      }
-      return Math.ceil(dream.maxGoal / grantValue);
-    },
-    currentNumberOfGrants: async (dream, args, { models: { Grant } }) => {
-      const [
-        { grantsForDream } = { grantsForDream: 0 },
-      ] = await Grant.aggregate([
-        {
-          $match: {
-            dreamId: mongoose.Types.ObjectId(dream.id),
-            reclaimed: false,
-          },
-        },
-        { $group: { _id: null, grantsForDream: { $sum: '$value' } } },
-      ]);
-      return grantsForDream;
-    },
+    minGoalGrants: async (dream, args, {controller}) => {
+      return await controller.minGoalGrants(dream); },
+    maxGoalGrants: async (dream, args, {controller}) => {
+      return await controller.maxGoalGrants(dream); },
+    currentNumberOfGrants: async (dream, args, {controller} ) => {
+      return await controller.currentNumberOfGrants(dream); },
     numberOfComments: (dream) => {
       return dream.comments.length;
     },
@@ -1286,6 +1157,9 @@ const resolvers = {
       if (ast.kind === Kind.INT) {
         return parseInt(ast.value, 10); // ast value is always in string format
       }
+      if (ast.kind === Kind.STRING) {
+        return new Date(ast.value);
+      }
       return null;
     },
   }),
@@ -1296,6 +1170,24 @@ const resolvers = {
   },
   JSON: GraphQLJSON,
   JSONObject: GraphQLJSONObject,
+  Cursor: new GraphQLScalarType({
+    // Cursors are for iteration, they represent a point in a list, like a bookmark.
+    // On the backend they translate to an offset for now, but we might change that in the future.
+    // Therefore we base64-encode them to make sure the client does not rely on them having that meaning.
+    name: 'Cursor',
+    parseValue(value) {
+      return parseInt(new Buffer(value, "base64").toString("ascii"), 10)
+    },
+    serialize(value) {
+      return new Buffer(""+value).toString("base64");
+    },
+    parseLiteral(ast) {
+      if (ast.kind === Kind.STRING) {
+        return parseInt(new Buffer(ast.value, "base64").toString("ascii"), 10); // ast value is always in string format
+      }
+      return null;
+    },
+  }),
   CustomFieldValue: {
     customField: async (customFieldValue, args, { models: { Event } }) => {
       const { eventId, fieldId, value } = customFieldValue;
@@ -1306,6 +1198,15 @@ const resolvers = {
       return eventCustomField[0];
     },
   },
+  LogEntry : {
+    details: LogEntry => LogEntry
+  },
+  LogEntryDetails : {
+    __resolveType: async(obj) => {
+      if(obj.kind == "GrantGiven")
+        return "GrantGivenDetails";
+    }
+  }
 };
 
 module.exports = resolvers;
