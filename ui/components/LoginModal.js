@@ -1,7 +1,6 @@
 import gql from "graphql-tag";
 import { useMutation } from "@apollo/react-hooks";
 import { useForm } from "react-hook-form";
-
 import { Modal } from "@material-ui/core";
 
 import TextField from "components/TextField";
@@ -18,7 +17,7 @@ export default ({ open, handleClose }) => {
     SEND_MAGIC_LINK_MUTATION
   );
   const { handleSubmit, register, errors } = useForm();
-
+  
   return (
     <Modal
       open={open}
@@ -50,7 +49,7 @@ export default ({ open, handleClose }) => {
                 inputRef={register({
                   required: "Required",
                   pattern: {
-                    value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,4}$/i,
+                    value: /^[ ]{0,}[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,4}[ ]{0,}$/i,
                     message: "invalid email address",
                   },
                 })}

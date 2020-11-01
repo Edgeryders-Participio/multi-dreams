@@ -32,8 +32,9 @@ class AuthService {
 
   static async sendMagicLink({ inputEmail, currentOrg, models: { User, Member, Event } }
   ) {
-    if (!isValidEmail(inputEmail)) throw new Error('Not a valid email address');
-    const email = inputEmail.toLowerCase();
+    const trimmedEmail = inputEmail.trim();
+    if (!isValidEmail(trimmedEmail)) throw new Error('Not a valid email address');
+    const email = trimmedEmail.toLowerCase();
   
     let user;
     if(currentOrg) {
