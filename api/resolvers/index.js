@@ -49,6 +49,12 @@ const resolvers = {
       if (!currentOrg) return null;
       return Event.findOne({ slug, organizationId: currentOrg.id });
     },
+    user: async (parent, { id }, { currentOrg, currentUser, models: { User } }) => {
+      if ((!currentUser) || (currentUser.organizationId != currentOrg.id))
+        throw new Error('Must be logged in to the organization to view users');
+      // TODO security - Probably better to limit some of the user fields such as email
+      return User.findOne({ _id: id });
+    },
     dream: async (parent, { id }, { models: { Dream } }) => {
       return Dream.findOne({ _id: id });
     },

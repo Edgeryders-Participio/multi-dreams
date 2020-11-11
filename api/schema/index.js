@@ -14,6 +14,7 @@ const schema = gql`
     dream(id: ID!): Dream
     dreams(eventId: ID!, textSearchTerm: String): [Dream]
     members(eventId: ID!, isApproved: Boolean): [Member]
+    user(id: ID!): User
   }
 
   type Mutation {

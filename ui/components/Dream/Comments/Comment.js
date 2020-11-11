@@ -3,11 +3,9 @@ import gql from "graphql-tag";
 import { useMutation } from "@apollo/react-hooks";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
-import Avatar from "../../Avatar";
-import { TextField, Button, IconButton } from "@material-ui/core";
 import { DeleteIcon, EditIcon } from "components/Icons";
-import { useForm } from "react-hook-form";
 import EditComment from "./EditComment";
+import UserInfoAvatar from '../../UserInfoAvatar';
 
 dayjs.extend(relativeTime);
 
@@ -44,10 +42,17 @@ const Comment = ({
     (currentUser.id === comment.author.id ||
       (currentUser.membership && currentUser.membership.isAdmin));
 
+  const { author } = comment;
   return (
     <div className="flex my-4">
       <div className="mr-4">
-        <Avatar user={comment.author} />
+        <UserInfoAvatar
+          currentUser={currentUser}
+          userId={author.id}
+          uniqueId={comment.id}
+          avatar={author.avatar}
+          alt={author.name}
+        />{' '}
       </div>
       <div className={`flex-grow ${showBorderBottom && "border-b"} pb-4`}>
         <div className="flex justify-between items-center mb-2 text-gray-900 font-medium text-sm">
