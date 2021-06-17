@@ -59,7 +59,7 @@
     "@storybook/react": "^6.2.9",
     "autoprefixer": "9.8.6",
     "babel-loader": "8.1.0",
-    "postcss": "7.0.35",
+    "postcss": "7.0.36",
     "storybook-preset-craco": "0.0.4",
     "tailwindcss": "npm:@tailwindcss/postcss7-compat@2.1.2"
   }
