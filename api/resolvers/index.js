@@ -127,7 +127,7 @@ const resolvers = {
     },
     dreamsPage: async (
       parent,
-      { eventSlug, textSearchTerm, tag: tagValue, offset, limit },
+      { eventSlug, textSearchTerm, tag: tagValue, timeSeed, offset, limit },
       {
         currentOrgMember,
         currentOrg,
@@ -200,20 +200,21 @@ const resolvers = {
         ? new Date(currentOrgMember.createdAt).getTime() % 1000
         : 1;
 
+      const dreamSeed = {
+        $mod: [{ $toDouble: { $ifNull: ["$createdAt", 1] } }, 1000],
+      };
+
       const dreamsWithExtra = [
         ...(await Dream.aggregate([{ $match: query }])
           .addFields({
             position: {
               $mod: [
                 {
-                  $multiply: [
+                  $add: [
                     {
-                      $mod: [
-                        { $toDouble: { $ifNull: ["$createdAt", 1] } },
-                        1000,
-                      ],
+                      $multiply: [dreamSeed, userSeed],
                     },
-                    userSeed,
+                    timeSeed,
                   ],
                 },
                 1000,

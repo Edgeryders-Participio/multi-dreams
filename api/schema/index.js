@@ -17,6 +17,7 @@ const schema = gql`
       eventSlug: String!
       textSearchTerm: String
       tag: String
+      timeSeed: Int
       offset: Int
       limit: Int
     ): DreamsPage
@@ -364,6 +365,7 @@ const schema = gql`
       eventSlug: String!
       textSearchTerm: String
       tag: String
+      timeSeed: Int
       offset: Int
       limit: Int
     ): [Dream]

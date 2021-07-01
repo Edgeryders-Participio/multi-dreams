@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, gql } from "@apollo/client";
 import Link from "next/link";
 import DreamCard from "components/DreamCard";
@@ -16,6 +16,7 @@ export const DREAMS_QUERY = gql`
     $eventSlug: String!
     $textSearchTerm: String
     $tag: String
+    $timeSeed: Int
     $offset: Int
     $limit: Int
   ) {
@@ -23,6 +24,7 @@ export const DREAMS_QUERY = gql`
       eventSlug: $eventSlug
       textSearchTerm: $textSearchTerm
       tag: $tag
+      timeSeed: $timeSeed
       offset: $offset
       limit: $limit
     ) {
@@ -31,6 +33,7 @@ export const DREAMS_QUERY = gql`
         eventSlug: $eventSlug
         textSearchTerm: $textSearchTerm
         tag: $tag
+        timeSeed: $timeSeed
         offset: $offset
         limit: $limit
       ) {
@@ -74,8 +77,16 @@ export const DREAMS_QUERY = gql`
 const EventPage = ({ currentOrgMember, event, router, currentOrg }) => {
   const [filterLabels, setFilterLabels] = useState();
   const [newDreamModalOpen, setNewDreamModalOpen] = useState(false);
+  const [timeSeed, setTimeSeed] = useState(undefined);
 
   const { tag, s } = router.query;
+
+  useEffect(() => {
+    const msPerDay = 1000 * 60 * 60 * 30; // one day being 30hrs :P
+    setTimeSeed(
+      Math.floor(((new Date().getTime() % msPerDay) / msPerDay) * 1000)
+    );
+  }, []);
 
   let {
     data: { dreamsPage: { moreExist, dreams } } = {
@@ -87,6 +98,7 @@ const EventPage = ({ currentOrgMember, event, router, currentOrg }) => {
   } = useQuery(DREAMS_QUERY, {
     variables: {
       eventSlug: router.query.event,
+      timeSeed,
       offset: 0,
       limit: 9,
       ...(!!s && { textSearchTerm: s }),
@@ -95,6 +107,7 @@ const EventPage = ({ currentOrgMember, event, router, currentOrg }) => {
     notifyOnNetworkStatusChange: true,
     fetchPolicy: "cache-and-network",
     nextFetchPolicy: "cache-first",
+    skip: timeSeed === undefined,
   });
 
   const allDreams = dreams;

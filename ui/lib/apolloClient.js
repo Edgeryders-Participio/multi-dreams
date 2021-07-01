@@ -105,6 +105,7 @@ export default function createApolloClient(initialState, ctx) {
               "eventSlug",
               "textSearchTerm",
               "tag",
+              "timeSeed",
             ]),
           },
         },
