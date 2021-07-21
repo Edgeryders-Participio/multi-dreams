@@ -1,47 +1,21 @@
-import React from "react";
-import { useMutation, gql } from "@apollo/client";
+import React, { useState, useContext } from "react";
 import TextField from "components/TextField";
 import Button from "components/Button";
 import { useForm } from "react-hook-form";
+import Context from "contexts/comment";
 
-const EDIT_COMMENT_MUTATION = gql`
-  mutation EditComment($dreamId: ID!, $commentId: ID!, $content: String!) {
-    editComment(dreamId: $dreamId, commentId: $commentId, content: $content) {
-      id
-      numberOfComments
-      comments {
-        id
-        discourseUsername
-        cooked
-        content
-        createdAt
-        isLog
-        orgMember {
-          id
-          user {
-            id
-            username
-            avatar
-          }
-        }
-      }
-    }
-  }
-`;
-
-const EditComment = ({ comment, dreamId, handleDone, event }) => {
+const EditComment = ({ comment, handleDone }) => {
+  const [submitting, setSubmitting] = useState(false);
   const { handleSubmit, register, errors } = useForm();
+  const { editComment, dream, event } = useContext(Context);
 
-  const [editComment, { loading }] = useMutation(EDIT_COMMENT_MUTATION, {
-    variables: { dreamId, commentId: comment.id },
-  });
   return (
     <form
-      onSubmit={handleSubmit((variables) => {
-        editComment({ variables })
-          .then(() => {
-            handleDone();
-          })
+      onSubmit={handleSubmit(({ content }) => {
+        setSubmitting(true);
+        editComment({ variables: { dreamId: dream.id, commentId: comment.id, content } })
+          .then(() => handleDone())
+          .finally(() => setSubmitting(false))
           .catch((err) => alert(err.message));
       })}
     >
@@ -66,7 +40,7 @@ const EditComment = ({ comment, dreamId, handleDone, event }) => {
         >
           Cancel
         </Button>
-        <Button type="submit" loading={loading} color={event.color}>
+        <Button type="submit" loading={submitting} color={event.color}>
           Save
         </Button>
       </div>

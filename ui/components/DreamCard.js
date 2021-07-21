@@ -50,7 +50,7 @@ const DreamCard = ({ dream, event }) => {
               </div>
             )}
 
-            {dream.numberOfComments > 0 && (
+            {parseInt(dream.numberOfComments) > 0 && (
               <Link
                 href="/[event]/[dream]#comments"
                 as={`/${event.slug}/${dream.id}#comments`}

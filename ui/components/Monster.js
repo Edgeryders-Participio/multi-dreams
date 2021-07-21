@@ -81,22 +81,6 @@ const RAISE_FLAG_MUTATION = gql`
           title
         }
       }
-      comments {
-        id
-        discourseUsername
-        cooked
-        content
-        createdAt
-        isLog
-        orgMember {
-          id
-          user {
-            id
-            username
-            avatar
-          }
-        }
-      }
     }
   }
 `;
@@ -111,22 +95,6 @@ const RESOLVE_FLAG_MUTATION = gql`
         guideline {
           id
           title
-        }
-      }
-      comments {
-        id
-        discourseUsername
-        cooked
-        content
-        createdAt
-        isLog
-        orgMember {
-          id
-          user {
-            id
-            username
-            avatar
-          }
         }
       }
     }

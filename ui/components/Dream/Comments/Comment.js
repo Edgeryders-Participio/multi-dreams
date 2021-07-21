@@ -1,37 +1,15 @@
-import React from "react";
-import { useMutation, gql } from "@apollo/client";
+import React, { useState, useContext } from "react";
+import { gql, useMutation } from "@apollo/client";
 import dayjs from "dayjs";
 import ReactMarkdown from "react-markdown";
 import relativeTime from "dayjs/plugin/relativeTime";
 import Avatar from "../../Avatar";
 import { DeleteIcon, EditIcon, FlagIcon } from "components/Icons";
 import EditComment from "./EditComment";
+import Context from "contexts/comment";
+import { LoaderIcon } from "../../Icons";
 
 dayjs.extend(relativeTime);
-
-const DELETE_COMMENT_MUTATION = gql`
-  mutation DeleteComment($dreamId: ID!, $commentId: ID!) {
-    deleteComment(dreamId: $dreamId, commentId: $commentId) {
-      id
-      numberOfComments
-      comments {
-        id
-        discourseUsername
-        cooked
-        content
-        createdAt
-        orgMember {
-          id
-          user {
-            id
-            username
-            avatar
-          }
-        }
-      }
-    }
-  }
-`;
 
 const LogIcon = () => (
   <div className="bg-gray-100 text-gray-700 rounded-full h-10 w-10 flex items-center justify-center">
@@ -41,13 +19,11 @@ const LogIcon = () => (
 
 const Comment = ({
   comment,
-  dreamId,
-  currentOrgMember,
   showBorderBottom,
-  event,
 }) => {
-  const [isEditMode, setEditMode] = React.useState(false);
-  const [deleteComment] = useMutation(DELETE_COMMENT_MUTATION);
+  const [submitting, setSubmitting] = useState(false);
+  const [isEditMode, setEditMode] = useState(false);
+  const { deleteComment, currentOrgMember, dream } = useContext(Context);
 
   const canEdit =
     currentOrgMember &&
@@ -60,11 +36,7 @@ const Comment = ({
         {comment.isLog ? (
           <LogIcon />
         ) : (
-          <Avatar
-            user={
-              comment.orgMember?.user ?? { username: comment.discourseUsername }
-            }
-          />
+          <Avatar user={comment.orgMember?.user} />
         )}
       </div>
       <div className={`flex-grow ${showBorderBottom && "border-b"} pb-4`}>
@@ -72,10 +44,7 @@ const Comment = ({
           {comment.isLog ? (
             <h5>Log</h5>
           ) : (
-            <h5>
-              {comment.orgMember?.user.username ??
-                `${comment.discourseUsername} (Discourse user)`}
-            </h5>
+            <h5>{comment.orgMember?.user.username}</h5>
           )}
           <div className="flex items-center">
             <span className="font-normal mr-2">
@@ -87,18 +56,14 @@ const Comment = ({
         {isEditMode ? (
           <EditComment
             comment={comment}
-            dreamId={dreamId}
-            handleDone={() => {
-              setEditMode(false);
-            }}
-            event={event}
+            handleDone={() => setEditMode(false)}
           />
         ) : (
           <>
-            {comment.cooked ? (
+            {comment.htmlContent ? (
               <div
                 className="text-gray-900 markdown"
-                dangerouslySetInnerHTML={{ __html: comment.cooked }}
+                dangerouslySetInnerHTML={{ __html: comment.htmlContent }}
               />
             ) : (
               <ReactMarkdown source={comment.content} className="markdown" />
@@ -107,19 +72,18 @@ const Comment = ({
             {canEdit && (
               <div className="flex">
                 <button
-                  onClick={() => {
-                    if (
-                      confirm(
-                        "Are you sure you would like to delete this comment?"
-                      )
+                  onClick={() => (
+                    confirm("Are you sure you would like to delete this comment?") && (
+                      deleteComment({ variables: { dreamId: dream.id, commentId: comment.id } }) && setSubmitting(true)
                     )
-                      deleteComment({
-                        variables: { dreamId, commentId: comment.id },
-                      });
-                  }}
+                  )}
                   className="mt-4 py-1 px-2 mr-2 flex items-center bg-gray-100 hover:bg-gray-200 text-sm text-gray-600 hover:text-gray-700 focus:outline-none rounded-md focus:ring"
                 >
-                  <DeleteIcon className="w-4 h-4 mr-1" />
+                  {submitting ? (
+                    <LoaderIcon className="w-5 h-5 animation-spin animation-linear animation-2s" />
+                  ) : (
+                    <DeleteIcon className="w-4 h-4 mr-1" />
+                  )}
                   <span>Delete</span>
                 </button>
                 <button

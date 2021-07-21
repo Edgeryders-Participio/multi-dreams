@@ -7,28 +7,33 @@ class EventHub {
   );
 
   static publish = async (channel, event) => {
-    const errors = await this.subscriptions[channel].reduce(
-      async (result, fn) => {
-        try {
-          await fn(event);
-          return result;
-        } catch (err) {
-          console.error(err);
-          if (result.concat) return result.concat(err);
-          return result;
-        }
-      },
-      []
-    );
+    const results = await Promise.all(this.subscriptions[channel].map(async (fn) => {
+      try {
+        return await fn(event);
+      } catch(error) {
+        return { error };
+      }
+    }));
+
+    const errors = results
+      .map(result => result.error)
+      .filter(error => error);
 
     if (errors.length) {
       errors.map(console.error);
       throw new Error(errors.join(", "));
     }
+
+    return results.reduce((hash, result) => ({
+      ...result,
+      ...hash
+    }), {})
   };
 
-  static subscribe(channel, fn) {
-    this.subscriptions[channel] = this.subscriptions[channel].concat(fn);
+  static subscribe(channel, namespace, fn) {
+    this.subscriptions[channel] = this.subscriptions[channel].concat(async (...args) => ({
+      [namespace]: (await fn(...args))
+    }));
   }
 }
 

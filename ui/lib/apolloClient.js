@@ -94,6 +94,34 @@ export default function createApolloClient(initialState, ctx) {
     link: authLink.concat(appLink),
     cache: new InMemoryCache({
       typePolicies: {
+        CommentSet: {
+          fields: {
+            comments: {
+              keyArgs: true,
+              merge(existing = [], incoming = [], { readField, mergeObjects }) {
+                const merged = existing.slice(0);
+
+                incoming.forEach((comment) => {
+                  const current = existing.findIndex(
+                    (c) => readField("id", c) == readField("id", comment)
+                  );
+
+                  if (current === -1) {
+                    merged.push(comment);
+                  } else {
+                    merged[current] = mergeObjects(existing[current], comment);
+                  }
+                });
+
+                return merged.sort((c1, c2) =>
+                  readField("createdAt", c1) < readField("createdAt", c2)
+                    ? -1
+                    : 1
+                );
+              },
+            },
+          },
+        },
         OrgMembersPage: {
           fields: {
             orgMembers: offsetLimitPagination(),
